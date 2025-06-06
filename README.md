@@ -1,36 +1,47 @@
-### Build Instructions (Compute Canada)
+========================================
+         BUILD INSTRUCTIONS
+========================================
 
-First load the correct modules:
-```
-module --force purge;module load StdEnv/2023 gcc/12.3 openmpi/4.1.5 cmake/3.27.7 cuda/12.2
-```
+-----------------------------
+1. On Compute Canada
+-----------------------------
 
-Then using an out-of-source build directory, build with cmake:
-```
-cmake -DCMAKE_BUILD_TYPE=Release ..
-make
-```
+First, load the necessary modules:
 
-This should create an executable called `linear-scans` that you can run without arguments.
+    module --force purge
+    module load StdEnv/2023 gcc/12.3 openmpi/4.1.5 cmake/3.27.7 cuda/12.2
 
-### Profiling Instructions (Compute Canada)
+Then build using an out-of-source directory:
 
-Use the _NSight Compute command line_ utility to get basic profile information:
+    mkdir build
+    cd build
+    cmake -DCMAKE_BUILD_TYPE=Release ..
+    make
 
-```
-ncu ./linear-scans
-```
+This will create an executable called `linear-scans`.
 
-For more detailed statistics, add extra group arguments:
+Run the program as:
 
-```
-ncu --section SpeedOfLight --section LaunchStats --section ComputeWorkloadAnalysis --section MemoryWorkloadAnalysis --section Occupancy --section SchedulerStats --section WarpStateStats ./linear-scans
-```
+    ./linear-scans
 
-To get event-level details, e.g., for warp stats:
 
-```
-ncu --metrics group:smsp__pcsamp_warp_stall_reasons ./linear-scans
-```
+-----------------------------
+2. On Local Linux (e.g., Clover)
+-----------------------------
 
-For more details, see [the Nvidia documentation](https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html).
+Requirements:
+    - CUDA 12.6
+    - GCC 13.3
+
+Build steps:
+
+    mkdir build
+    cd build
+    cmake -DCMAKE_BUILD_TYPE=Release ..
+    make
+
+Run the executable with arguments:
+
+    ./linear-scans 2
+    or
+    ./linear-scans 3

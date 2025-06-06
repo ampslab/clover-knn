@@ -45,3 +45,21 @@ Run the executable with arguments:
     ./linear-scans 2
     or
     ./linear-scans 3
+    
+-----------------------------
+3. For Included Baselines
+-----------------------------
+
+Please refer to the original repositories of the baselines for their specific build instructions.
+
+**Note for Arkade users:**
+
+Use the following command to run the modified version included in this repo:
+
+    ./s01-knn filename nsearchpoints
+
+Do **not** include the `radius_estimate` and `npoints` argument as required in the original version.
+
+The radius selection algorithm has been incorporated into the modified Arkade code in this repository.
+It differs from the one used in the original release.
+

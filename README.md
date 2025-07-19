@@ -1,3 +1,24 @@
+📄 Paper
+
+This codebase accompanies the paper:
+
+CLOVER: A GPU-native, Spatio-graph-based Approach to Exact kNN
+Victor Kamel, Hanxueyu Yan, and Sean Chester (2025)
+
+If you use this work, please cite the paper.
+
+📬 Contact
+
+For questions or collaboration inquiries, please contact:
+
+    Victor Kamel — vkamel@cs.toronto.edu
+
+    Hanxueyu Yan — hyan76131@uvic.ca
+
+    Sean Chester — schester@uvic.ca
+
+
+
 ========================================
          BUILD INSTRUCTIONS
 ========================================

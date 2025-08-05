@@ -67,6 +67,9 @@ Run the executable with arguments:
     or
     ./linear-scans 3
     
+    The arguments listing is:
+    
+    
 -----------------------------
 3. For Included Baselines
 -----------------------------

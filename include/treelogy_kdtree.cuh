@@ -30,7 +30,6 @@ void treelogy_kd_tree(std::size_t n, R *data, std::size_t q, idx_t *queries, std
     nsearchpoints = npoints;
     
     SAFE_CALLOC(points, npoints, sizeof(node));
-    //SAFE_MALLOC(search_points, sizeof(float)*nsearchpoints*DIM);
     SAFE_CALLOC(search_points, nsearchpoints, sizeof(node));
     SAFE_MALLOC(nearest_distance, sizeof(float)*nsearchpoints*k);
     SAFE_MALLOC(nearest_point_index, sizeof(unsigned int)*nsearchpoints*k);
@@ -67,29 +66,17 @@ void treelogy_kd_tree(std::size_t n, R *data, std::size_t q, idx_t *queries, std
     node * d_search_points;
     float * d_nearest_distance = results_distances;
     int * d_nearest_point_index = results_knn;
-/*
-    #ifdef TRACK_TRAVERSALS	
-    int *h_nodes_accessed;
-    int *d_nodes_accessed;
-    SAFE_CALLOC(h_nodes_accessed, nsearchpoints, sizeof(int));
-    CUDA_SAFE_CALL(cudaMalloc(&d_nodes_accessed, sizeof(int)*nsearchpoints));
-    CUDA_SAFE_CALL(cudaMemcpy(d_nodes_accessed, h_nodes_accessed, sizeof(int)*nsearchpoints, cudaMemcpyHostToDevice));
-    #endif
-*/
+
     // Read from but not written to
     CUDA_SAFE_CALL(cudaMalloc(&d_search_points, sizeof(node)*nsearchpoints));
     CUDA_SAFE_CALL(cudaMemcpy(d_search_points, search_points, sizeof(node)*nsearchpoints, cudaMemcpyHostToDevice));
 
     cudaEventRecord(start_query, 0);
 
-    //gpu_print_tree_host(h_tree);
     dim3 grid(NUM_THREAD_BLOCKS, 1, 1);
     dim3 block(NUM_THREADS_PER_BLOCK, 1, 1);
     unsigned int smem_bytes = DIM*NUM_THREADS_PER_BLOCK*sizeof(float) + k*NUM_THREADS_PER_BLOCK*sizeof(int) + k*NUM_THREADS_PER_BLOCK*sizeof(float);
     nearest_neighbor_search<<<grid, block, smem_bytes>>>(*d_tree, nsearchpoints, d_search_points, d_nearest_distance, d_nearest_point_index, k
-#ifdef TRACK_TRAVERSALS
-                                                                                                            , d_nodes_accessed																											 
-#endif
     );
     cudaEventRecord(stop_query, 0);        
     cudaEventSynchronize(stop_query);

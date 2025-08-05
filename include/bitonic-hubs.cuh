@@ -73,64 +73,6 @@ __global__ void Calculate_Distances(idx_t b_id, idx_t b_size, idx_t n, idx_t con
     }
 }
 
-/**
- * Deletes all hubs with less than k points and moves their points to new hubs
- */
-template <class R>
-__global__
-void reassignPoints( idx_t n, idx_t k, R const * distances, idx_t *hub_counts, idx_t *dH_assignments )
-{
-    int constexpr shared_memory_size = 1024;
-
-    assert( "Cannot find more neighbours than there are points" && k < n );
-    assert( "Need one __shared__ lane per hub" && H < shared_memory_size );
-
-    idx_t const idx = blockIdx.x * blockDim.x + threadIdx.x;
-
-    __shared__ idx_t initial_counts[shared_memory_size];
-    if( idx < H )
-    {
-        initial_counts[ idx ] = hub_counts[ idx ];
-    }
-    __syncwarp(); __syncthreads();
-
-    if( idx < n )
-    {
-        idx_t const current_hub = dH_assignments[ idx ];
-        if( initial_counts[ current_hub ] < k )
-        {
-            R minimal_dist = FLT_MAX;
-            idx_t new_hub  = H;
-
-            for( idx_t h = 0; h < H; ++h )
-            {
-                R const next_distance = distances[ h*n + idx ];
-                assert( "next distance is reasonable?" && next_distance < FLT_MAX );
-                if( initial_counts[h] >= k && next_distance < minimal_dist )
-                {
-                    new_hub = h;
-                    minimal_dist = next_distance;
-                }
-            }
-
-            assert( "Hub must have changed in loop because k < n" && new_hub != dH_assignments[ idx ] );
-            assert( "Hub must have changed in loop because k < n" && new_hub < H );
-            assert( "Hub must have changed in loop because k < n" && minimal_dist < FLT_MAX );
-            assert( "New hub is valid"                            && initial_counts[ new_hub ] >= k );
-            assert( "New hub should not be better than old hub"   && distances[new_hub*n + idx] >= distances[current_hub*n + idx]);
-
-            dH_assignments[idx] = new_hub;
-            atomicAdd( &hub_counts[new_hub], 1 );
-        }
-    }
-
-    // Reset unused hubs to zero for prefix sum, etc. later.
-    if( idx < H && initial_counts[ idx ] < k )
-    {
-        hub_counts[ idx ] = 0;
-    }
-}
-
 template < typename T >
 __device__ __forceinline__
 void prefix_sum_warp( T & my_val )
@@ -318,96 +260,6 @@ void Construct_D( float const * distances, idx_t const * assignments, idx_t b_id
             D[ H * hub_id + r * blockDim.x + block_level_lane_id ] = __int_as_float( s_dists[ r * blockDim.x + block_level_lane_id ] );
         } 
     }
-}
-
-template < typename R >
-__global__
-void Construct_D( R * points
-                , idx_t * dH
-                , idx_t const * assignments
-                , idx_t const * hub_start_pos
-                , idx_t const * arr_idx
-                , std::size_t   n
-                , R           * D
-                )
-{
-    std::size_t constexpr shared_memory_size = 32;
-    __shared__ int s_dists[ shared_memory_size ];
-
-    // Expecting a grid of size:          H x  H x 1
-    // and a CTA / thread block of size: 32 x 32 x 1
-
-    // Each thread block will work collaboratively on one cell of the HxH matrix
-    // They will use (hub_start_pos, arr_idx) to find the relevant distances and
-    // then perform a block-level reduction. The reads all involve a level of indirection
-    // from global memory and are expected to be non-coalesced.
-
-    int const lane_id     = threadIdx.x;
-    int const warp_id     = threadIdx.y;
-    int const th_id       = warp_id * blockDim.x + lane_id;
-    int const num_threads = blockDim.x * blockDim.y;
-
-    int const from_hub_id = blockIdx.x;
-    int const to_hub_id = blockIdx.y;
-
-    idx_t const start = hub_start_pos[ from_hub_id ];
-    idx_t const end   = hub_start_pos[ from_hub_id + 1 ];
-
-    // perform reduction over values in arr_idx[start] ... arr_idx[end]
-    R my_min = FLT_MAX;
-
-    R const * hp = &points[dH[to_hub_id]];
-    
-    // walk the entire hub with each thread locally determining
-    // the smallest value that it has seen
-    for( int i = start + th_id; i < end; i += num_threads )
-    {   
-        R * this_p = &points[arr_idx[i]];
-
-        int const new_dist = spatial::l2dist(hp, this_p);
-        if( new_dist < my_min )
-        {
-            my_min = new_dist;
-        }
-    }
-
-    // reduce each warp
-    
-    for( int stride = 1; stride < 32; stride = stride << 1 )
-    {
-        //sync_warp here and below. call before shfls/communications
-        R const paired_dist = __shfl_xor_sync( 0xFFFFFFFF, my_min, stride );
-        if( paired_dist < my_min )
-        {
-            my_min = paired_dist;
-        }
-    }
-
-    
-    // sync warps and reduce blockwise
-    if( lane_id == 0 )
-    {
-        s_dists[ warp_id ] = my_min;
-    }
-
-    __syncthreads();
-
-    if( warp_id > 0 ) { return; }
-    
-    my_min = s_dists[ lane_id ];
-    
-    for( int stride = 1; stride < 32; stride = stride << 1 )
-    {
-        R const paired_dist = __shfl_xor_sync( 0xFFFFFFFF, my_min, stride );
-        if( paired_dist < my_min )
-        {
-            my_min = paired_dist;
-        }
-    }
-
-    if( lane_id > 0 ) { return; }
-
-    D[ from_hub_id * H + to_hub_id ] = my_min;
 }
 
 /**
@@ -697,16 +549,6 @@ void Query( idx_t const * Qps, idx_t * solutions_knn, float *solutions_distances
     }
 }
 
-template<typename R>
-__global__ void check(idx_t * iD, float * dD, idx_t *results_knn, R * results_distances){
-    int const hid = blockIdx.x;
-    int const tid = threadIdx.x;
-    if(hid < H && tid < H){
-        results_knn[tid + hid*H] = iD[tid + hid*H];
-        results_distances[tid + hid*H] = dD[tid + hid*H];
-    }
-}
-
 template <class R>
 void C_and_Q(std::size_t n, R *data, std::size_t q, idx_t *queries, std::size_t k, idx_t *results_knn, R *results_distances)
 {
@@ -726,7 +568,7 @@ void C_and_Q(std::size_t n, R *data, std::size_t q, idx_t *queries, std::size_t 
     cudaMemset(dH_assignments, 0, sizeof(idx_t) * n);
 
     float * distances;
-    idx_t constexpr batch_size = 100000;
+    idx_t constexpr batch_size = 10000;
     idx_t batch_number = (n + batch_size -1) / batch_size;
     CUDA_CALL(cudaMalloc((void **) &distances, sizeof(R) * H * batch_size));
 
@@ -760,7 +602,6 @@ void C_and_Q(std::size_t n, R *data, std::size_t q, idx_t *queries, std::size_t 
         Calculate_Distances<<<num_blocks, block_size>>>(batch_id, batch_size, n, dH, distances, data, dH_psum, dH_assignments);
         Construct_D<<<H, block_size>>>(distances, dH_assignments, batch_id, batch_size, n, D);
     }
-    //check<<<H, H>>>(iD, D, results_knn, results_distances);
     cudaFree( distances );
     
     fused_prefix_sum_copy<<<1, dim3( warp_size,  warp_size, 1)  >>>(dH_psum, dH_psum_copy);
@@ -778,8 +619,6 @@ void C_and_Q(std::size_t n, R *data, std::size_t q, idx_t *queries, std::size_t 
     BucketSort<<<num_blocks,  block_size>>>(n, arr_x, arr_y, arr_z, arr_idx, data, dH_assignments, dH_psum_copy);
     CHECK_ERROR("BucketSort.");
     cudaFree(dH_psum_copy);
-
-    //Construct_D<<<dim3( H, H, 1), dim3( warp_size,  warp_size, 1)>>>(data, dH, dH_assignments, dH_psum, arr_idx, n, D);
 
     fused_transform_sort_D<float, (H + block_size - 1) / block_size> <<<H, dim3 { warp_size, block_size/warp_size, 1 }>>> (D, iD, dD);
     CHECK_ERROR("Sort_D.");

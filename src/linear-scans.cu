@@ -579,7 +579,9 @@ int main( int argc, char **argv )
     std::optional< Algorithm > const algorithm = parse_input( argc, argv );
     
     using real = float;
-
+    /*
+    Running on Uniform distributions.
+    */
     execute_knn<float, 1000, 3>(argc, argv);
     execute_knn<float, 2000, 3>(argc, argv);
     execute_knn<float, 5000, 3>(argc, argv);
@@ -597,7 +599,9 @@ int main( int argc, char **argv )
     execute_knn<float, 800000, 3>(argc, argv);
     execute_knn<float, 900000, 3>(argc, argv);
     execute_knn<float, 1000000, 3>(argc, argv);
-
+    /*
+    Running on input meshes. The input dir should be put in line 479.
+    */
     execute_knn_meshes<real, 3>(argc, argv);
 
     return EXIT_SUCCESS;
